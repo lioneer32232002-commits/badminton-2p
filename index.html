@@ -362,9 +362,9 @@ function update(){
 
   updateEffects();
 
-  // 玩家移動
-  movePlayer(p1, 'KeyW','KeyS','KeyA','KeyD', COURT.y+4, NET_Y-4);
-  movePlayer(p2, 'ArrowUp','ArrowDown','ArrowLeft','ArrowRight', NET_Y+4, COURT.y+COURT.h-4);
+  // 玩家移動（P1 在下半場、P2 在上半場）
+  movePlayer(p1, 'KeyW','KeyS','KeyA','KeyD', NET_Y+4, COURT.y+COURT.h-4);
+  movePlayer(p2, 'ArrowUp','ArrowDown','ArrowLeft','ArrowRight', COURT.y+4, NET_Y-4);
 
   if(p1.swingTimer>0) p1.swingTimer--;
   if(p2.swingTimer>0) p2.swingTimer--;
