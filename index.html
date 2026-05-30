@@ -53,27 +53,90 @@ canvas {
 #hint b { color:#4ad07a; }
 #hint .p2b { color:#ff7a7a; }
 #overlay {
-  position:fixed; inset:0; background:rgba(0,0,0,0.88);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; z-index:10; padding:18px; overflow-y:auto;
+  position:fixed; inset:0; z-index:10;
+  display:flex; align-items:center; justify-content:center;
+  text-align:center; padding:18px; overflow-y:auto;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(74,208,122,0.12), transparent 58%),
+    linear-gradient(160deg, #0b2418 0%, #0c1f16 45%, #06120b 100%);
 }
-#overlay h1 { font-size:clamp(28px,7vw,42px); color:#4ad07a; margin-bottom:10px; letter-spacing:3px; }
-#overlay p { color:#bbb; font-size:clamp(12px,3.4vw,15px); line-height:1.8; margin-bottom:6px; max-width:560px; }
-#overlay .keys { color:#fff; }
-#overlay .keys b { color:#4ad07a; }
-#overlay .keys .p2b { color:#ff7a7a; }
-#mode-row { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:22px; }
-#overlay button {
-  padding:14px 30px; font-size:clamp(15px,4vw,18px); font-family:inherit;
-  background:#4ad07a; color:#062; border:none; border-radius:10px; cursor:pointer;
-  letter-spacing:1px;
-}
-#overlay button.alt { background:#2a8f52; color:#eafff0; }
-#overlay button:hover { background:#6ee89a; }
-#overlay button.alt:hover { background:#37a862; }
 #overlay.hidden { display:none; }
-.desktop-only { }
-@media (hover:none){ .desktop-only{ display:none; } }
+
+/* 細緻的場線質感背景 */
+#overlay::before{
+  content:''; position:absolute; inset:0; pointer-events:none; opacity:0.06;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 38px, rgba(255,255,255,0.5) 38px 39px),
+    repeating-linear-gradient(90deg, transparent 0 38px, rgba(255,255,255,0.5) 38px 39px);
+}
+
+.panel{
+  position:relative; width:100%; max-width:440px;
+  background:rgba(11,28,20,0.72);
+  border:1px solid rgba(74,208,122,0.35); border-radius:22px;
+  box-shadow:0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+  backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+  padding:30px 26px 26px;
+}
+.panel[hidden]{ display:none; }
+
+.shuttle-anim{ font-size:48px; line-height:1; animation:floaty 2.6s ease-in-out infinite; }
+@keyframes floaty{ 0%,100%{ transform:translateY(0) rotate(-7deg);} 50%{ transform:translateY(-13px) rotate(7deg);} }
+
+.panel h1{
+  font-size:clamp(34px,9vw,54px); letter-spacing:7px; margin:6px 0 6px; font-weight:900;
+  background:linear-gradient(180deg,#b8f7d0,#4ad07a 70%);
+  -webkit-background-clip:text; background-clip:text;
+  color:transparent; -webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 3px 12px rgba(74,208,122,0.45));
+}
+.panel h2{ color:#4ad07a; font-size:22px; letter-spacing:4px; margin-bottom:16px; }
+.subtitle{ color:#8fae9c; font-size:13px; letter-spacing:2px; margin-bottom:22px; }
+
+.mode-row{ display:flex; gap:14px; justify-content:center; margin-bottom:14px; }
+.mode-btn{
+  flex:1; max-width:165px; display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:16px 10px; border:none; border-radius:16px; cursor:pointer; font-family:inherit; color:#053019;
+  background:linear-gradient(180deg,#62e28e,#39b667);
+  box-shadow:0 6px 18px rgba(57,182,103,0.38);
+  transition:transform .12s ease, box-shadow .12s ease;
+}
+.mode-btn.alt{ color:#eafff1; background:linear-gradient(180deg,#3c7d57,#295c40); box-shadow:0 6px 18px rgba(0,0,0,0.4); }
+.mode-btn:hover{ transform:translateY(-3px); box-shadow:0 12px 26px rgba(57,182,103,0.5); }
+.mode-btn:active{ transform:translateY(-1px); }
+.mode-btn .ico{ font-size:27px; }
+.mode-btn .txt{ font-size:19px; font-weight:900; letter-spacing:1px; }
+.mode-btn .sub{ font-size:11px; opacity:0.82; letter-spacing:1px; }
+
+.ghost{
+  margin-top:8px; padding:10px 20px; font-family:inherit; font-size:13px; letter-spacing:1px;
+  background:transparent; color:#7fcf9c; border:1px solid rgba(127,207,156,0.4);
+  border-radius:10px; cursor:pointer; transition:background .12s;
+}
+.ghost:hover{ background:rgba(127,207,156,0.13); }
+
+/* 教學頁 */
+.tut{ text-align:left; max-width:330px; margin:0 auto 14px; }
+.tut .row{ display:flex; align-items:center; gap:12px; margin-bottom:12px; color:#d4efdd; font-size:14px; line-height:1.4; }
+.tut .badge{ flex:none; min-width:74px; text-align:center; font-weight:bold; color:#fff; font-size:13px;
+  background:rgba(255,255,255,0.09); border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:7px 4px; }
+.tut .badge.p2{ color:#ff9a9a; border-color:rgba(255,122,122,0.4); }
+.court-mini{ width:160px; height:120px; margin:4px auto 16px; position:relative;
+  border:2px solid rgba(255,255,255,0.55); border-radius:8px; background:#1c6b41;
+  box-shadow:0 8px 20px rgba(0,0,0,0.4); }
+.court-mini .net{ position:absolute; left:-2px; right:-2px; top:50%; height:3px; transform:translateY(-50%); background:#fff; }
+.court-mini .lbl{ position:absolute; left:0; right:0; text-align:center; font-size:11px; letter-spacing:1px; }
+.court-mini .top{ top:12%; color:#ff9a9a; }
+.court-mini .bot{ bottom:24%; color:#9bf3bd; }
+.court-mini .finger{ position:absolute; font-size:22px; bottom:8%; left:50%; margin-left:-11px;
+  animation:dragx 1.9s ease-in-out infinite; }
+@keyframes dragx{ 0%,100%{ transform:translateX(-22px);} 50%{ transform:translateX(22px);} }
+.tut-common{ color:#9fc4ad; font-size:13px; line-height:1.7; max-width:340px; margin:0 auto 16px; }
+.tut-common b{ color:#ffd24a; }
+
+.touch-only{ display:none; }
+body.touch .touch-only{ display:block; }
+body.touch .desktop-only{ display:none; }
 </style>
 </head>
 <body>
@@ -103,17 +166,62 @@ canvas {
 </div>
 
 <div id="overlay">
-  <h1>羽毛球</h1>
-  <p>俯視視角・落地得分・先到 21 分</p>
-  <p class="keys desktop-only"><b>玩家 1（下半場・綠）</b>：<b>W A S D</b> 移動，<b>空白鍵</b> 擊球</p>
-  <p class="keys desktop-only"><span class="p2b">玩家 2（上半場・紅）</span>：<span class="p2b">方向鍵</span> 移動，<span class="p2b">Enter</span> 擊球</p>
-  <p style="margin-top:10px;color:#999;">移動到球附近就會<b style="color:#fff">自動回擊</b>，球在<b style="color:#ffd24a">高處自動殺球</b>。<span class="desktop-only">按住左右方向鍵</span><span style="display:none" class="touch-only">往左右移動</span>控制落點。</p>
-  <p style="color:#999;">連續對拉球會越來越快 🔥　｜　陰影離球越遠＝飛得越高。</p>
-  <div id="mode-row">
-    <button id="soloBtn">單人（對電腦）</button>
-    <button id="duoBtn" class="alt">雙人對戰</button>
+  <!-- 首頁 -->
+  <div id="home" class="panel">
+    <div class="shuttle-anim">🏸</div>
+    <h1>羽毛球</h1>
+    <div class="subtitle">俯視對戰 · 落地得分 · 先到 21 分</div>
+    <div class="mode-row">
+      <button id="soloBtn" class="mode-btn">
+        <span class="ico">🤖</span><span class="txt">單人</span><span class="sub">對電腦</span>
+      </button>
+      <button id="duoBtn" class="mode-btn alt">
+        <span class="ico">👥</span><span class="txt">雙人</span><span class="sub">同機對戰</span>
+      </button>
+    </div>
+    <button id="howBtn" class="ghost">📖 操作教學</button>
   </div>
-  <p style="margin-top:12px;color:#666;font-size:12px;" class="touch-only" id="touch-tip" hidden>手機：手指在自己半場拖動移球；雙人時兩人各拖一邊</p>
+
+  <!-- 教學頁 -->
+  <div id="tutorial" class="panel" hidden>
+    <h2>操作教學</h2>
+
+    <!-- 桌面：鍵盤 -->
+    <div class="tut desktop-only">
+      <div class="row"><span class="badge">W A S D</span><span>玩家 1（綠）移動</span></div>
+      <div class="row"><span class="badge">空白鍵</span><span>玩家 1 擊球（也會自動）</span></div>
+      <div class="row"><span class="badge p2">方向鍵</span><span>玩家 2（紅）移動</span></div>
+      <div class="row"><span class="badge p2">Enter</span><span>玩家 2 擊球（也會自動）</span></div>
+    </div>
+
+    <!-- 手機：觸控 -->
+    <div class="tut touch-only">
+      <div class="court-mini">
+        <div class="net"></div>
+        <div class="lbl top">對手 / 玩家2</div>
+        <div class="lbl bot">你的半場</div>
+        <div class="finger">👆</div>
+      </div>
+      <div class="row"><span class="badge">拖動</span><span>手指在<b>自己半場</b>拖動 → 移動球員</span></div>
+      <div class="row"><span class="badge">靠近</span><span>移到球附近 → <b>自動回擊</b></span></div>
+      <div class="row"><span class="badge">左右</span><span>往左右移動 → 控制落點</span></div>
+      <div class="row"><span class="badge">雙人</span><span>兩人各按住一邊（多點觸控）</span></div>
+    </div>
+
+    <p class="tut-common">球在<b>高處自動殺球</b>；連續對拉球會<b>越來越快 🔥</b>；陰影離球越遠＝飛得越高。</p>
+    <button id="backBtn" class="ghost">← 返回</button>
+  </div>
+
+  <!-- 結算頁 -->
+  <div id="result" class="panel" hidden>
+    <div class="shuttle-anim">🏆</div>
+    <h1 id="winTitle">獲勝！</h1>
+    <div class="subtitle" id="winScore">0 : 0</div>
+    <div class="mode-row">
+      <button id="replayBtn" class="mode-btn"><span class="ico">🔁</span><span class="txt">再玩一次</span></button>
+      <button id="switchBtn" class="mode-btn alt"><span class="ico">🔀</span><span class="txt">換模式</span></button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -391,19 +499,17 @@ function awardPoint(winner, reason){
   }
 }
 
+function showPanel(id){
+  ['home','tutorial','result'].forEach(p=>{ document.getElementById(p).hidden = (p!==id); });
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
 function showOver(winner){
-  const ov = document.getElementById('overlay');
-  ov.classList.remove('hidden');
   const winName = winner===1 ? '玩家 1' : (aiActive ? '電腦' : '玩家 2');
-  ov.querySelector('h1').textContent = winName + ' 獲勝！';
-  // 只留第一段顯示比數，其餘說明隱藏
-  ov.querySelectorAll('p').forEach((p,i)=>{ p.style.display = i===0?'block':'none'; });
-  ov.querySelector('h1').nextElementSibling.textContent = score1 + ' : ' + score2 + '　｜　最佳連拍 ' + bestRally;
-  // 按鈕改為「再玩一次」（沿用上一局模式）＋「換模式」
-  document.getElementById('soloBtn').textContent = '再玩一次';
-  document.getElementById('soloBtn').onclick = ()=> startGame(mode);
-  document.getElementById('duoBtn').textContent = mode==='solo' ? '改雙人' : '改單人';
-  document.getElementById('duoBtn').onclick = ()=> startGame(mode==='solo'?'duo':'solo');
+  document.getElementById('winTitle').textContent = winName + ' 獲勝！';
+  document.getElementById('winScore').textContent = score1 + ' : ' + score2 + '　｜　最佳連拍 ' + bestRally;
+  document.querySelector('#switchBtn .txt').textContent = (mode==='solo' ? '改雙人' : '改單人');
+  showPanel('result');
 }
 
 // ---- 更新 ----
@@ -822,7 +928,11 @@ function loop(){
 }
 
 document.getElementById('soloBtn').onclick = ()=> startGame('solo');
-document.getElementById('duoBtn').onclick = ()=> startGame('duo');
+document.getElementById('duoBtn').onclick  = ()=> startGame('duo');
+document.getElementById('howBtn').onclick  = ()=> showPanel('tutorial');
+document.getElementById('backBtn').onclick = ()=> showPanel('home');
+document.getElementById('replayBtn').onclick = ()=> startGame(mode);
+document.getElementById('switchBtn').onclick = ()=> startGame(mode==='solo' ? 'duo' : 'solo');
 
 // ---- 觸控操作（手機/平板）----
 function canvasPos(t){
@@ -843,11 +953,12 @@ function handleTouches(e){
 ['touchstart','touchmove','touchend','touchcancel'].forEach(ev=>
   canvas.addEventListener(ev, handleTouches, {passive:false}));
 
-// 觸控裝置：顯示觸控提示、隱藏鍵盤說明
+// 觸控裝置：套用 touch 樣式（CSS 切換鍵盤/觸控教學），並改底部提示
 if(window.matchMedia && window.matchMedia('(hover:none) and (pointer:coarse)').matches){
   document.body.classList.add('touch');
-  document.querySelectorAll('.touch-only').forEach(el=>{ el.style.display = el.tagName==='SPAN'?'inline':'block'; });
-  const tip = document.getElementById('touch-tip'); if(tip) tip.hidden = false;
+  document.getElementById('hint').textContent = '手指在自己半場拖動移球 · 靠近自動擊球';
+} else {
+  document.getElementById('hint').innerHTML = '<b>P1</b> WASD＋空白　·　<span style="color:#ff7a7a"><b>P2</b> 方向鍵＋Enter</span>';
 }
 
 loop();
