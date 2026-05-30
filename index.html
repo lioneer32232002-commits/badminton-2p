@@ -6,22 +6,28 @@
 <title>雙人羽毛球 Badminton</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; }
 body {
   background:#0c1f16;
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
-  min-height:100vh;
+  min-height:100vh; min-height:100dvh;
   font-family:'Arial Black','Segoe UI',sans-serif;
   color:#fff; overflow:hidden; user-select:none;
+  -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+}
+#wrap {
+  width:min(760px, 100vw);
+  display:flex; flex-direction:column;
 }
 #ui-top {
   display:flex; align-items:center; justify-content:space-between;
-  width:760px; padding:8px 22px;
+  width:100%; padding:8px 22px;
   background:rgba(0,0,0,0.55);
   border-radius:12px 12px 0 0;
   border:2px solid #4ad07a; border-bottom:none;
 }
-.score-box { text-align:center; min-width:150px; }
+.score-box { text-align:center; min-width:90px; }
 .score-box .label { font-size:12px; color:#9fb; letter-spacing:2px; }
 .score-box .score { font-size:46px; line-height:1; color:#4ad07a; }
 .score-box.p2 .label { color:#fcb; }
@@ -31,15 +37,17 @@ body {
 #mid-box .serve { font-size:13px; color:#ffd24a; margin-top:3px; min-height:18px; }
 canvas {
   display:block;
+  width:100%; height:auto;
   border:2px solid #4ad07a; border-top:none; border-bottom:none;
   outline:none; background:#13402a;
+  touch-action:none;
 }
 #ui-bottom {
-  width:760px; padding:8px 18px;
+  width:100%; padding:8px 18px;
   background:rgba(0,0,0,0.55);
   border-radius:0 0 12px 12px;
   border:2px solid #4ad07a; border-top:1px solid #2a4;
-  display:flex; justify-content:space-between; align-items:center;
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
   font-size:12px; color:#ccc;
 }
 #hint b { color:#4ad07a; }
@@ -47,27 +55,33 @@ canvas {
 #overlay {
   position:fixed; inset:0; background:rgba(0,0,0,0.88);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; z-index:10;
+  text-align:center; z-index:10; padding:18px; overflow-y:auto;
 }
-#overlay h1 { font-size:42px; color:#4ad07a; margin-bottom:10px; letter-spacing:3px; }
-#overlay p { color:#bbb; font-size:15px; line-height:1.9; margin-bottom:6px; }
+#overlay h1 { font-size:clamp(28px,7vw,42px); color:#4ad07a; margin-bottom:10px; letter-spacing:3px; }
+#overlay p { color:#bbb; font-size:clamp(12px,3.4vw,15px); line-height:1.8; margin-bottom:6px; max-width:560px; }
 #overlay .keys { color:#fff; }
 #overlay .keys b { color:#4ad07a; }
 #overlay .keys .p2b { color:#ff7a7a; }
+#mode-row { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:22px; }
 #overlay button {
-  margin-top:22px; padding:12px 38px; font-size:18px; font-family:inherit;
+  padding:14px 30px; font-size:clamp(15px,4vw,18px); font-family:inherit;
   background:#4ad07a; color:#062; border:none; border-radius:10px; cursor:pointer;
-  letter-spacing:2px;
+  letter-spacing:1px;
 }
+#overlay button.alt { background:#2a8f52; color:#eafff0; }
 #overlay button:hover { background:#6ee89a; }
+#overlay button.alt:hover { background:#37a862; }
 #overlay.hidden { display:none; }
+.desktop-only { }
+@media (hover:none){ .desktop-only{ display:none; } }
 </style>
 </head>
 <body>
 
+<div id="wrap">
 <div id="ui-top">
   <div class="score-box p1">
-    <div class="label">玩家 1（綠）</div>
+    <div class="label" id="label1">玩家 1（綠）</div>
     <div class="score" id="score1">0</div>
   </div>
   <div id="mid-box">
@@ -75,7 +89,7 @@ canvas {
     <div class="serve" id="serve-msg"></div>
   </div>
   <div class="score-box p2">
-    <div class="label">玩家 2（紅）</div>
+    <div class="label" id="label2">玩家 2（紅）</div>
     <div class="score" id="score2">0</div>
   </div>
 </div>
@@ -83,21 +97,23 @@ canvas {
 <canvas id="game" width="760" height="560"></canvas>
 
 <div id="ui-bottom">
-  <div id="hint">
-    <b>P1：WASD 移動・空白鍵 擊球</b>　|
-    <span class="p2b">P2：方向鍵 移動・Enter 擊球</span>
-  </div>
-  <div>球在高處自動殺球 / 左右鍵控制落點　|　<b>M</b> 靜音</div>
+  <div id="hint">手指拖動移動・靠近自動擊球</div>
+  <div>球在高處自動殺球　|　<b>M</b> 靜音</div>
+</div>
 </div>
 
 <div id="overlay">
-  <h1>雙人羽毛球</h1>
-  <p>俯視視角・同機對戰・落地得分</p>
-  <p class="keys"><b>玩家 1（下半場・綠）</b>：<b>W A S D</b> 移動，<b>空白鍵</b> 擊球</p>
-  <p class="keys"><span class="p2b">玩家 2（上半場・紅）</span>：<span class="p2b">方向鍵</span> 移動，<span class="p2b">Enter</span> 擊球</p>
-  <p style="margin-top:14px;color:#999;font-size:13px;">移動到球附近，按住擊球鍵就會自動回擊。球在<b style="color:#ffd24a">高處會自動殺球</b>，按住<b style="color:#fff">左右方向鍵</b>控制落點。</p>
-  <p style="color:#999;font-size:13px;">連續對拉球會越來越快 🔥　｜　陰影離球越遠代表球飛得越高。</p>
-  <button id="startBtn">開始遊戲</button>
+  <h1>羽毛球</h1>
+  <p>俯視視角・落地得分・先到 21 分</p>
+  <p class="keys desktop-only"><b>玩家 1（下半場・綠）</b>：<b>W A S D</b> 移動，<b>空白鍵</b> 擊球</p>
+  <p class="keys desktop-only"><span class="p2b">玩家 2（上半場・紅）</span>：<span class="p2b">方向鍵</span> 移動，<span class="p2b">Enter</span> 擊球</p>
+  <p style="margin-top:10px;color:#999;">移動到球附近就會<b style="color:#fff">自動回擊</b>，球在<b style="color:#ffd24a">高處自動殺球</b>。<span class="desktop-only">按住左右方向鍵</span><span style="display:none" class="touch-only">往左右移動</span>控制落點。</p>
+  <p style="color:#999;">連續對拉球會越來越快 🔥　｜　陰影離球越遠＝飛得越高。</p>
+  <div id="mode-row">
+    <button id="soloBtn">單人（對電腦）</button>
+    <button id="duoBtn" class="alt">雙人對戰</button>
+  </div>
+  <p style="margin-top:12px;color:#666;font-size:12px;" class="touch-only" id="touch-tip" hidden>手機：手指在自己半場拖動移球；雙人時兩人各拖一邊</p>
 </div>
 
 <script>
@@ -132,6 +148,7 @@ function makePlayer(isP1){
     px:0, py:0,            // 上一幀位置
     reach: 72,             // 擊球範圍（加大、更好打）
     hitCd: 0,              // 擊球冷卻
+    touch: null,           // 觸控目標 {x,y}（手機）
     swingTimer: 0,         // 揮拍動畫
     color: isP1 ? '#4ad07a' : '#ff7a7a',
     dark: isP1 ? '#2a8f52' : '#c24',
@@ -143,6 +160,9 @@ let p1, p2;
 let bird = { x:W/2, y:0, z:0, vx:0, vy:0, vz:0, owner:null, alive:false, spin:0 };
 
 let score1 = 0, score2 = 0;
+let mode = 'duo';          // 'solo'=單人對電腦, 'duo'=雙人
+let aiActive = false;      // 紅方是否由電腦控制
+let aiServeDelay = 0;      // AI 發球前的延遲
 let server = 1;            // 哪邊發球
 let lastHitter = null;
 let serveMsg = '';
@@ -238,6 +258,7 @@ function resetServe(){
   bird.y = srv.y + (server===1 ? -10 : 10);
   bird.z = 70;
   lastHitter = null;
+  aiServeDelay = 45;          // AI 發球前稍作停頓
   // 重置上一幀位置，避免首次擊球讀到假的移動量
   p1.px = p1.x; p1.py = p1.y;
   p2.px = p2.x; p2.py = p2.y;
@@ -245,7 +266,10 @@ function resetServe(){
   document.getElementById('serve-msg').textContent = serveMsg;
 }
 
-function startGame(){
+function startGame(m){
+  mode = m || 'duo';
+  aiActive = (mode === 'solo');
+  document.getElementById('label2').textContent = aiActive ? '電腦（紅）' : '玩家 2（紅）';
   p1 = makePlayer(true);
   p2 = makePlayer(false);
   score1 = 0; score2 = 0;
@@ -276,10 +300,14 @@ function tryHit(player, hitKey){
   player.hitCd = 14;                         // 擊球冷卻，避免按住連發
   const dirY = player.isP1 ? -1 : 1;          // P1 往上打、P2 往下打
 
-  // 落點左右：用目前按住的左右鍵（直覺）
+  // 落點左右：鍵盤用左右鍵；觸控/AI 用當下的移動方向
   let aim = 0;
   if(player.isP1){ if(keys['KeyA']) aim-=1; if(keys['KeyD']) aim+=1; }
   else { if(keys['ArrowLeft']) aim-=1; if(keys['ArrowRight']) aim+=1; }
+  if(aim===0){
+    const mvx = player.x - player.px;
+    if(Math.abs(mvx) > 0.5) aim = mvx > 0 ? 1 : -1;
+  }
 
   initAudio();
   lastHitter = player.isP1 ? 1 : 2;
@@ -366,10 +394,16 @@ function awardPoint(winner, reason){
 function showOver(winner){
   const ov = document.getElementById('overlay');
   ov.classList.remove('hidden');
-  ov.querySelector('h1').textContent = (winner===1?'玩家 1':'玩家 2') + ' 獲勝！';
+  const winName = winner===1 ? '玩家 1' : (aiActive ? '電腦' : '玩家 2');
+  ov.querySelector('h1').textContent = winName + ' 獲勝！';
+  // 只留第一段顯示比數，其餘說明隱藏
   ov.querySelectorAll('p').forEach((p,i)=>{ p.style.display = i===0?'block':'none'; });
   ov.querySelector('h1').nextElementSibling.textContent = score1 + ' : ' + score2 + '　｜　最佳連拍 ' + bestRally;
-  ov.querySelector('button').textContent = '再玩一次';
+  // 按鈕改為「再玩一次」（沿用上一局模式）＋「換模式」
+  document.getElementById('soloBtn').textContent = '再玩一次';
+  document.getElementById('soloBtn').onclick = ()=> startGame(mode);
+  document.getElementById('duoBtn').textContent = mode==='solo' ? '改雙人' : '改單人';
+  document.getElementById('duoBtn').onclick = ()=> startGame(mode==='solo'?'duo':'solo');
 }
 
 // ---- 更新 ----
@@ -382,16 +416,25 @@ function update(){
   if(p1.hitCd>0) p1.hitCd--;
   if(p2.hitCd>0) p2.hitCd--;
 
-  // 玩家移動（P1 在下半場、P2 在上半場）
-  movePlayer(p1, 'KeyW','KeyS','KeyA','KeyD', NET_Y+4, COURT.y+COURT.h-4);
-  movePlayer(p2, 'ArrowUp','ArrowDown','ArrowLeft','ArrowRight', COURT.y+4, NET_Y-4);
+  // ---- 玩家 1（下半場）：觸控優先，否則鍵盤 ----
+  if(p1.touch) moveToward(p1, p1.touch.x, p1.touch.y, NET_Y+4, COURT.y+COURT.h-4);
+  else movePlayer(p1, 'KeyW','KeyS','KeyA','KeyD', NET_Y+4, COURT.y+COURT.h-4);
+
+  // ---- 玩家 2（上半場）：AI / 觸控 / 鍵盤 ----
+  if(aiActive){
+    updateAI();
+  } else if(p2.touch){
+    moveToward(p2, p2.touch.x, p2.touch.y, COURT.y+4, NET_Y-4);
+  } else {
+    movePlayer(p2, 'ArrowUp','ArrowDown','ArrowLeft','ArrowRight', COURT.y+4, NET_Y-4);
+  }
 
   if(p1.swingTimer>0) p1.swingTimer--;
   if(p2.swingTimer>0) p2.swingTimer--;
 
-  // 擊球輸入
-  tryHit(p1, keys['Space']);
-  tryHit(p2, keys['Enter']);
+  // 擊球輸入（鍵盤鍵 或 觸控中=自動回擊）
+  tryHit(p1, keys['Space'] || !!p1.touch);
+  if(!aiActive) tryHit(p2, keys['Enter'] || !!p2.touch);
 
   if(state===STATE.POINT){
     if(pointFlash>0) pointFlash--;
@@ -448,6 +491,45 @@ function movePlayer(p, up,down,left,right, yMin,yMax){
   // 限制在自己半場
   p.x = Math.max(COURT.x+4, Math.min(COURT.x+COURT.w-4, p.x));
   p.y = Math.max(yMin, Math.min(yMax, p.y));
+}
+
+// 朝目標點移動（觸控用）
+function moveToward(p, tx, ty, yMin, yMax){
+  tx = Math.max(COURT.x+4, Math.min(COURT.x+COURT.w-4, tx));
+  ty = Math.max(yMin, Math.min(yMax, ty));
+  const dx = tx-p.x, dy = ty-p.y, d = Math.hypot(dx,dy);
+  const spd = SPEED*1.15;
+  if(d > spd){ p.x += dx/d*spd; p.y += dy/d*spd; }
+  else { p.x = tx; p.y = ty; }
+}
+
+// 電腦對手（控制紅方 P2，上半場）
+function updateAI(){
+  const p = p2;
+  let tx = W/2, ty = COURT.y + COURT.h*0.26;   // 預設回防位置
+  if(bird.alive){
+    if(state===STATE.SERVE && server===2){
+      tx = p.x; ty = p.y;                       // 發球前待在原地
+    } else if(bird.vy < 0 || bird.y < NET_Y){
+      // 球往 P2 半場飛：預測落點並上前
+      tx = bird.x + bird.vx*9;
+      ty = bird.z > 95 ? NET_Y - 60 : COURT.y + COURT.h*0.30;
+    } else {
+      tx = bird.x*0.35 + (W/2)*0.65;            // 球在對面：微微跟著回中
+    }
+  }
+  const spd = SPEED*0.92;                        // 略慢於人類，可被打敗
+  const dx = tx-p.x, dy = ty-p.y;
+  if(Math.abs(dx) > spd) p.x += Math.sign(dx)*spd; else p.x = tx;
+  if(Math.abs(dy) > spd) p.y += Math.sign(dy)*spd; else p.y = ty;
+  p.x = Math.max(COURT.x+4, Math.min(COURT.x+COURT.w-4, p.x));
+  p.y = Math.max(COURT.y+4, Math.min(NET_Y-4, p.y));
+  // 出手
+  if(state===STATE.SERVE && server===2){
+    if(aiServeDelay > 0) aiServeDelay--; else tryHit(p, true);
+  } else {
+    tryHit(p, true);
+  }
 }
 
 function checkBirdEvents(){
@@ -739,12 +821,34 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-document.getElementById('startBtn').addEventListener('click', ()=>{
-  // 重置 overlay 文案
-  const ov = document.getElementById('overlay');
-  ov.querySelectorAll('p').forEach(p=>{ p.style.display='block'; });
-  startGame();
-});
+document.getElementById('soloBtn').onclick = ()=> startGame('solo');
+document.getElementById('duoBtn').onclick = ()=> startGame('duo');
+
+// ---- 觸控操作（手機/平板）----
+function canvasPos(t){
+  const r = canvas.getBoundingClientRect();
+  return { x:(t.clientX-r.left)*(W/r.width), y:(t.clientY-r.top)*(H/r.height) };
+}
+function handleTouches(e){
+  if(!p1) return;
+  e.preventDefault();
+  p1.touch = null;
+  if(!aiActive) p2.touch = null;
+  for(const t of e.touches){
+    const pos = canvasPos(t);
+    if(pos.y >= NET_Y) p1.touch = pos;            // 下半場 → 玩家1
+    else if(!aiActive) p2.touch = pos;            // 上半場 → 玩家2（雙人）
+  }
+}
+['touchstart','touchmove','touchend','touchcancel'].forEach(ev=>
+  canvas.addEventListener(ev, handleTouches, {passive:false}));
+
+// 觸控裝置：顯示觸控提示、隱藏鍵盤說明
+if(window.matchMedia && window.matchMedia('(hover:none) and (pointer:coarse)').matches){
+  document.body.classList.add('touch');
+  document.querySelectorAll('.touch-only').forEach(el=>{ el.style.display = el.tagName==='SPAN'?'inline':'block'; });
+  const tip = document.getElementById('touch-tip'); if(tip) tip.hidden = false;
+}
 
 loop();
 </script>
