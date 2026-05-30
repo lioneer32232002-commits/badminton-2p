@@ -35,10 +35,14 @@ body {
 #mid-box { text-align:center; }
 #mid-box .target { font-size:12px; color:#888; }
 #mid-box .serve { font-size:13px; color:#ffd24a; margin-top:3px; min-height:18px; }
+#court-area {
+  width:100%;
+  border-left:2px solid #4ad07a; border-right:2px solid #4ad07a;
+  line-height:0;
+}
 canvas {
   display:block;
   width:100%; height:auto;
-  border:2px solid #4ad07a; border-top:none; border-bottom:none;
   outline:none; background:#13402a;
   touch-action:none;
 }
@@ -47,8 +51,18 @@ canvas {
   background:rgba(0,0,0,0.55);
   border-radius:0 0 12px 12px;
   border:2px solid #4ad07a; border-top:1px solid #2a4;
-  display:flex; justify-content:space-between; align-items:center; gap:8px;
-  font-size:12px; color:#ccc;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  font-size:12px; color:#ccc; text-align:center;
+}
+
+/* 手機：填滿螢幕高度（直式球場）*/
+@media (max-width:700px){
+  body{ justify-content:flex-start; }
+  #wrap{ height:100vh; height:100dvh; }
+  #ui-top{ border-radius:0; }
+  #ui-bottom{ border-radius:0; }
+  #court-area{ flex:1 1 auto; min-height:0; position:relative; }
+  canvas{ position:absolute; inset:0; width:100%; height:100%; }
 }
 #hint b { color:#4ad07a; }
 #hint .p2b { color:#ff7a7a; }
@@ -157,11 +171,11 @@ body.touch .desktop-only{ display:none; }
   </div>
 </div>
 
-<canvas id="game" width="760" height="560"></canvas>
+<div id="court-area"><canvas id="game" width="760" height="560"></canvas></div>
 
 <div id="ui-bottom">
   <div id="hint">手指拖動移動・靠近自動擊球</div>
-  <div>球在高處自動殺球　|　<b>M</b> 靜音</div>
+  <div id="hint2">球在高處自動殺球　|　<b>M</b> 靜音</div>
 </div>
 </div>
 
@@ -227,12 +241,36 @@ body.touch .desktop-only{ display:none; }
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
 
-// ---- 球場座標 ----
+// ---- 球場座標（依裝置自適應）----
 // 俯視：x 橫向，y 縱向（上＝P2 場，下＝P1 場）。z 為高度。
-const COURT = { x:90, y:40, w:W-180, h:H-80 };
-const NET_Y = COURT.y + COURT.h/2;
+// W/H 為畫布內部解析度；手機用直式填滿、桌機維持 760×560。
+// S 為相對原始(球場高 480)的縮放係數，物理與視覺大小都乘上 S 以保持手感一致。
+let W = 760, H = 560, S = 1;
+let COURT = { x:90, y:40, w:580, h:480 };
+let NET_Y = COURT.y + COURT.h/2;
+
+function layout(){
+  const mobile = window.matchMedia('(max-width:700px)').matches;
+  if(mobile){
+    const area = document.getElementById('court-area');
+    W = Math.max(240, Math.round(area.clientWidth));
+    H = Math.max(240, Math.round(area.clientHeight));
+  } else {
+    W = 760; H = 560;
+  }
+  canvas.width = W; canvas.height = H;
+  const mx = Math.round(W*0.118), my = Math.round(H*0.071);
+  COURT = { x:mx, y:my, w:W-mx*2, h:H-my*2 };
+  NET_Y = COURT.y + COURT.h/2;
+  S = COURT.h / 480;
+  if(p1) p1.reach = 72*S;
+  if(p2) p2.reach = 72*S;
+  // 夾住現有位置避免跑出新球場
+  if(p1){ p1.x=clamp(p1.x,COURT.x+4,COURT.x+COURT.w-4); p1.y=clamp(p1.y,NET_Y+4,COURT.y+COURT.h-4); }
+  if(p2){ p2.x=clamp(p2.x,COURT.x+4,COURT.x+COURT.w-4); p2.y=clamp(p2.y,COURT.y+4,NET_Y-4); }
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
 // ---- 遊戲狀態 ----
 const STATE = { MENU:0, SERVE:1, RALLY:2, POINT:3, OVER:4 };
@@ -254,7 +292,7 @@ function makePlayer(isP1){
     y: isP1 ? COURT.y + COURT.h*0.78 : COURT.y + COURT.h*0.22,
     vx:0, vy:0,
     px:0, py:0,            // 上一幀位置
-    reach: 72,             // 擊球範圍（加大、更好打）
+    reach: 72*S,           // 擊球範圍（加大、更好打，隨場地縮放）
     hitCd: 0,              // 擊球冷卻
     touch: null,           // 觸控目標 {x,y}（手機）
     swingTimer: 0,         // 揮拍動畫
@@ -363,8 +401,8 @@ function resetServe(){
   bird.owner = server;
   bird.vx = bird.vy = bird.vz = 0;
   bird.x = srv.x;
-  bird.y = srv.y + (server===1 ? -10 : 10);
-  bird.z = 70;
+  bird.y = srv.y + (server===1 ? -10 : 10)*S;
+  bird.z = 70*S;
   lastHitter = null;
   aiServeDelay = 45;          // AI 發球前稍作停頓
   // 重置上一幀位置，避免首次擊球讀到假的移動量
@@ -378,6 +416,7 @@ function startGame(m){
   mode = m || 'duo';
   aiActive = (mode === 'solo');
   document.getElementById('label2').textContent = aiActive ? '電腦（紅）' : '玩家 2（紅）';
+  layout();
   p1 = makePlayer(true);
   p2 = makePlayer(false);
   score1 = 0; score2 = 0;
@@ -402,7 +441,7 @@ function updateScore(){
 function tryHit(player, hitKey){
   if(!hitKey || !bird.alive || player.hitCd>0) return;
   const dist = Math.hypot(bird.x-player.x, bird.y-player.y);
-  if(dist > player.reach || bird.z > 175) return;
+  if(dist > player.reach || bird.z > 175*S) return;
 
   player.swingTimer = 8;
   player.hitCd = 14;                         // 擊球冷卻，避免按住連發
@@ -423,9 +462,9 @@ function tryHit(player, hitKey){
 
   // ---- 發球：固定的好打高拋球，預設往對面場中央 ----
   if(state === STATE.SERVE){
-    bird.vy = dirY * 6.2;
-    bird.vz = 9.5;
-    bird.vx = aim*2.0 + (W/2 - bird.x)*0.015;
+    bird.vy = dirY * 6.2 * S;
+    bird.vz = 9.5 * S;
+    bird.vx = aim*2.0*S + (W/2 - bird.x)*0.015;
     bird.spin = 0;
     lastShotSmash = false;
     sfxHit();
@@ -439,7 +478,7 @@ function tryHit(player, hitKey){
 
   // ---- 一般回擊：球種依「球的高度」自動決定 ----
   const heat = 1 + Math.min(rally*0.025, 0.45);   // 連拍越多球越快
-  const high = bird.z > 95;
+  const high = bird.z > 95*S;
   let power, lift, shotName, shotColor, isSmash=false;
   if(high){
     power = 10.5; lift = 2.5; isSmash = true; bird.spin = 1;
@@ -448,9 +487,9 @@ function tryHit(player, hitKey){
     power = 7.2; lift = 8.5; bird.spin = 0;
     shotName = '回擊'; shotColor = '#ffffff';
   }
-  bird.vy = dirY * power * heat;
-  bird.vz = lift;
-  bird.vx = aim * 3.4;
+  bird.vy = dirY * power * heat * S;
+  bird.vz = lift * S;
+  bird.vx = aim * 3.4 * S;
   lastShotSmash = isSmash;
 
   // ---- 特效 ----
@@ -554,8 +593,8 @@ function update(){
   if(state===STATE.SERVE && bird.alive){
     const srv = server===1 ? p1 : p2;
     bird.x = srv.x;
-    bird.y = srv.y + (server===1 ? -10 : 10);
-    bird.z = 70;
+    bird.y = srv.y + (server===1 ? -10 : 10)*S;
+    bird.z = 70*S;
   }
 
   // 羽球物理（殺球命中後短暫定格，增加衝擊感）
@@ -566,7 +605,7 @@ function update(){
       bird.x += bird.vx;
       bird.y += bird.vy;
       bird.z += bird.vz;
-      bird.vz -= GRAV;
+      bird.vz -= GRAV*S;
       // 羽球空氣阻力（飄）：水平速度逐漸衰減，尾段下墜明顯
       bird.vx *= 0.985;
       bird.vy *= 0.992;
@@ -592,8 +631,8 @@ function movePlayer(p, up,down,left,right, yMin,yMax){
   if(keys[left]) ax-=1;
   if(keys[right]) ax+=1;
   if(ax&&ay){ ax*=0.707; ay*=0.707; }
-  p.x += ax*SPEED;
-  p.y += ay*SPEED;
+  p.x += ax*SPEED*S;
+  p.y += ay*SPEED*S;
   // 限制在自己半場
   p.x = Math.max(COURT.x+4, Math.min(COURT.x+COURT.w-4, p.x));
   p.y = Math.max(yMin, Math.min(yMax, p.y));
@@ -604,7 +643,7 @@ function moveToward(p, tx, ty, yMin, yMax){
   tx = Math.max(COURT.x+4, Math.min(COURT.x+COURT.w-4, tx));
   ty = Math.max(yMin, Math.min(yMax, ty));
   const dx = tx-p.x, dy = ty-p.y, d = Math.hypot(dx,dy);
-  const spd = SPEED*1.15;
+  const spd = SPEED*1.15*S;
   if(d > spd){ p.x += dx/d*spd; p.y += dy/d*spd; }
   else { p.x = tx; p.y = ty; }
 }
@@ -619,12 +658,12 @@ function updateAI(){
     } else if(bird.vy < 0 || bird.y < NET_Y){
       // 球往 P2 半場飛：預測落點並上前
       tx = bird.x + bird.vx*9;
-      ty = bird.z > 95 ? NET_Y - 60 : COURT.y + COURT.h*0.30;
+      ty = bird.z > 95*S ? NET_Y - 60*S : COURT.y + COURT.h*0.30;
     } else {
       tx = bird.x*0.35 + (W/2)*0.65;            // 球在對面：微微跟著回中
     }
   }
-  const spd = SPEED*0.92;                        // 略慢於人類，可被打敗
+  const spd = SPEED*0.92*S;                      // 略慢於人類，可被打敗
   const dx = tx-p.x, dy = ty-p.y;
   if(Math.abs(dx) > spd) p.x += Math.sign(dx)*spd; else p.x = tx;
   if(Math.abs(dy) > spd) p.y += Math.sign(dy)*spd; else p.y = ty;
@@ -641,7 +680,7 @@ function updateAI(){
 function checkBirdEvents(){
   // 撞網：低空越網失敗
   const crossingNet = (bird.y-bird.vy < NET_Y) !== (bird.y < NET_Y);
-  if(crossingNet && bird.z < 28){
+  if(crossingNet && bird.z < 28*S){
     // 掛網，由擊球方失分
     const winner = lastHitter===1 ? 2 : 1;
     awardPoint(winner, '掛網');
@@ -694,22 +733,24 @@ function draw(){
 
   // 場線
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2*S;
   ctx.strokeRect(COURT.x, COURT.y, COURT.w, COURT.h);
   // 中線（左右發球區）
   ctx.beginPath();
   ctx.moveTo(W/2, COURT.y); ctx.lineTo(W/2, COURT.y+COURT.h);
   ctx.stroke();
   // 前發球線
+  const fl = 58*S;
   ctx.beginPath();
-  ctx.moveTo(COURT.x, NET_Y-58); ctx.lineTo(COURT.x+COURT.w, NET_Y-58);
-  ctx.moveTo(COURT.x, NET_Y+58); ctx.lineTo(COURT.x+COURT.w, NET_Y+58);
+  ctx.moveTo(COURT.x, NET_Y-fl); ctx.lineTo(COURT.x+COURT.w, NET_Y-fl);
+  ctx.moveTo(COURT.x, NET_Y+fl); ctx.lineTo(COURT.x+COURT.w, NET_Y+fl);
   ctx.stroke();
   // 雙打邊線
+  const dl = 30*S;
   ctx.strokeStyle = 'rgba(255,255,255,0.4)';
   ctx.beginPath();
-  ctx.moveTo(COURT.x+30, COURT.y); ctx.lineTo(COURT.x+30, COURT.y+COURT.h);
-  ctx.moveTo(COURT.x+COURT.w-30, COURT.y); ctx.lineTo(COURT.x+COURT.w-30, COURT.y+COURT.h);
+  ctx.moveTo(COURT.x+dl, COURT.y); ctx.lineTo(COURT.x+dl, COURT.y+COURT.h);
+  ctx.moveTo(COURT.x+COURT.w-dl, COURT.y); ctx.lineTo(COURT.x+COURT.w-dl, COURT.y+COURT.h);
   ctx.stroke();
 
   // 網子
@@ -744,7 +785,7 @@ function draw(){
     ctx.save();
     ctx.globalAlpha = Math.min(1, pointFlash/30);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 30px "Arial Black"';
+    ctx.font = 'bold ' + Math.round(28*S) + 'px "Arial Black"';
     ctx.textAlign='center';
     ctx.fillText(pointText, W/2, H/2);
     ctx.restore();
@@ -757,7 +798,7 @@ function drawTrail(){
     const a = t.life*0.4*(i/trail.length);
     ctx.fillStyle = t.smash ? 'rgba(255,210,74,'+a+')' : 'rgba(255,255,255,'+a+')';
     ctx.beginPath();
-    ctx.arc(t.x, t.y, 3*(i/trail.length)+1, 0, Math.PI*2);
+    ctx.arc(t.x, t.y, (3*(i/trail.length)+1)*S, 0, Math.PI*2);
     ctx.fill();
   }
 }
@@ -765,15 +806,16 @@ function drawTrail(){
 // 場邊觀眾：上下各一排小點，得分時(crowdEnergy 高)會跳動歡呼
 function drawCrowd(){
   const cols = ['#e6b35a','#7fb0e0','#e07f9a','#9ad17a','#c79ae0','#e0c97f'];
-  const rows = [ {y:20, n:26}, {y:H-20, n:26} ];
+  const n = Math.max(14, Math.round(COURT.w/22));
+  const rows = [ {y:COURT.y*0.5}, {y:H-COURT.y*0.5} ];
   for(const row of rows){
-    for(let i=0;i<row.n;i++){
-      const x = COURT.x + (i+0.5)*(COURT.w/row.n);
-      const bounce = crowdEnergy * 6 * Math.abs(Math.sin(tick*0.3 + i*0.9));
+    for(let i=0;i<n;i++){
+      const x = COURT.x + (i+0.5)*(COURT.w/n);
+      const bounce = crowdEnergy * 6*S * Math.abs(Math.sin(tick*0.3 + i*0.9));
       ctx.fillStyle = cols[i % cols.length];
       ctx.globalAlpha = 0.55 + crowdEnergy*0.4;
       ctx.beginPath();
-      ctx.arc(x, row.y - bounce, 4, 0, Math.PI*2);
+      ctx.arc(x, row.y - bounce, 4*S, 0, Math.PI*2);
       ctx.fill();
     }
   }
@@ -785,7 +827,7 @@ function drawParticles(){
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 3*p.life+0.5, 0, Math.PI*2);
+    ctx.arc(p.x, p.y, (3*p.life+0.5)*S, 0, Math.PI*2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -795,8 +837,8 @@ function drawFloats(){
   ctx.textAlign='center';
   for(const f of floats){
     ctx.globalAlpha = Math.max(0, f.life);
-    ctx.font = 'bold '+f.size+'px "Arial Black"';
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.font = 'bold '+Math.round(f.size*S)+'px "Arial Black"';
+    ctx.lineWidth = 3*S; ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.strokeText(f.text, f.x, f.y);
     ctx.fillStyle = f.color;
     ctx.fillText(f.text, f.x, f.y);
@@ -810,11 +852,11 @@ function drawServeArrow(){
   const a = Math.abs(Math.sin(serveBlink*0.12));
   ctx.globalAlpha = 0.4 + a*0.5;
   ctx.fillStyle = server===1 ? '#4ad07a' : '#ff7a7a';
-  const bx = srv.x, by = srv.y + dir*30;
+  const bx = srv.x, by = srv.y + dir*30*S;
   ctx.beginPath();
-  ctx.moveTo(bx, by + dir*10);
-  ctx.lineTo(bx-7, by - dir*2);
-  ctx.lineTo(bx+7, by - dir*2);
+  ctx.moveTo(bx, by + dir*10*S);
+  ctx.lineTo(bx-7*S, by - dir*2*S);
+  ctx.lineTo(bx+7*S, by - dir*2*S);
   ctx.closePath();
   ctx.fill();
   ctx.globalAlpha = 1;
@@ -823,82 +865,83 @@ function drawServeArrow(){
 function drawHUD(){
   // 連拍計數（左上）
   ctx.textAlign='left';
-  ctx.font = 'bold 14px "Arial Black"';
+  ctx.font = 'bold '+Math.round(14*S)+'px "Arial Black"';
   if(state===STATE.RALLY && rally>0){
     ctx.fillStyle = rally>=5 ? '#ffd24a' : '#cfe';
-    ctx.fillText('連拍 '+rally, COURT.x+6, COURT.y+22);
+    ctx.fillText('連拍 '+rally, COURT.x+6, COURT.y+22*S);
   }
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = 'bold 12px "Arial Black"';
-  ctx.fillText('最佳連拍 '+bestRally, COURT.x+6, COURT.y+COURT.h-10);
+  ctx.font = 'bold '+Math.round(12*S)+'px "Arial Black"';
+  ctx.fillText('最佳連拍 '+bestRally, COURT.x+6, COURT.y+COURT.h-10*S);
   // 靜音狀態（右上）
   ctx.textAlign='right';
   ctx.fillStyle = soundOn ? 'rgba(255,255,255,0.45)' : 'rgba(255,120,120,0.7)';
-  ctx.fillText(soundOn?'♪ 音效開 (M)':'✕ 靜音 (M)', COURT.x+COURT.w-6, COURT.y+22);
+  ctx.fillText(soundOn?'♪ 音效開 (M)':'✕ 靜音 (M)', COURT.x+COURT.w-6, COURT.y+22*S);
 
   // 賽末點提示
   const mp1 = score1>=20 && score1-score2>=1 && state!==STATE.OVER;
   const mp2 = score2>=20 && score2-score1>=1 && state!==STATE.OVER;
   if(mp1 || mp2){
     ctx.textAlign='center';
-    ctx.font = 'bold 20px "Arial Black"';
+    ctx.font = 'bold '+Math.round(20*S)+'px "Arial Black"';
     const a = 0.6 + 0.4*Math.abs(Math.sin(serveBlink*0.15));
     ctx.globalAlpha = a;
     ctx.fillStyle = mp1 ? '#4ad07a' : '#ff7a7a';
-    ctx.fillText('賽　末　點', W/2, COURT.y+24);
+    ctx.fillText('賽　末　點', W/2, COURT.y+24*S);
     ctx.globalAlpha = 1;
   }
 }
 
 function drawNet(){
-  const ny = NET_Y;
+  const ny = NET_Y, h = 3*S;
   // 網帶
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.fillRect(COURT.x, ny-3, COURT.w, 6);
+  ctx.fillRect(COURT.x, ny-h, COURT.w, h*2);
   // 網格
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 1;
-  for(let x=COURT.x; x<=COURT.x+COURT.w; x+=12){
-    ctx.beginPath(); ctx.moveTo(x, ny-3); ctx.lineTo(x, ny+3); ctx.stroke();
+  for(let x=COURT.x; x<=COURT.x+COURT.w; x+=12*S){
+    ctx.beginPath(); ctx.moveTo(x, ny-h); ctx.lineTo(x, ny+h); ctx.stroke();
   }
   // 網柱
   ctx.fillStyle = '#ddd';
-  ctx.fillRect(COURT.x-3, ny-7, 6, 14);
-  ctx.fillRect(COURT.x+COURT.w-3, ny-7, 6, 14);
+  ctx.fillRect(COURT.x-3*S, ny-7*S, 6*S, 14*S);
+  ctx.fillRect(COURT.x+COURT.w-3*S, ny-7*S, 6*S, 14*S);
 }
 
 function drawPlayer(p){
+  const R = 14*S;
   // 陰影
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y+14, 16, 7, 0, 0, Math.PI*2);
+  ctx.ellipse(p.x, p.y+R, R*1.15, R*0.5, 0, 0, Math.PI*2);
   ctx.fill();
   // 身體
   ctx.fillStyle = p.color;
   ctx.beginPath();
-  ctx.arc(p.x, p.y, 14, 0, Math.PI*2);
+  ctx.arc(p.x, p.y, R, 0, Math.PI*2);
   ctx.fill();
-  ctx.strokeStyle = p.dark; ctx.lineWidth=3; ctx.stroke();
+  ctx.strokeStyle = p.dark; ctx.lineWidth=3*S; ctx.stroke();
   // 球拍（揮拍時甩出）
   const dir = p.isP1 ? -1 : 1;
-  let rax = p.x + 16;
-  let ray = p.y + dir*4;
+  let rax = p.x + R*1.15;
+  let ray = p.y + dir*4*S;
   if(p.swingTimer>0){
     const t = p.swingTimer/8;
-    rax = p.x + 16 - t*8;
-    ray = p.y + dir*(4 + t*22);
+    rax = p.x + R*1.15 - t*8*S;
+    ray = p.y + dir*(4 + t*22)*S;
   }
-  ctx.strokeStyle = '#eee'; ctx.lineWidth=3;
+  ctx.strokeStyle = '#eee'; ctx.lineWidth=3*S;
   ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(rax, ray); ctx.stroke();
-  ctx.beginPath(); ctx.arc(rax, ray, 6, 0, Math.PI*2);
-  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(rax, ray, 6*S, 0, Math.PI*2);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2*S; ctx.stroke();
 }
 
 function drawBird(){
   // 陰影（落點）
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  const sr = 6 - Math.min(4, bird.z*0.015);
+  const sr = (6 - Math.min(4, bird.z*0.015))*S;
   ctx.ellipse(bird.x, bird.y, Math.max(2,sr), Math.max(1.5,sr*0.5), 0, 0, Math.PI*2);
   ctx.fill();
 
@@ -907,15 +950,15 @@ function drawBird(){
   // 羽毛裙
   ctx.fillStyle = 'rgba(255,255,255,0.95)';
   ctx.beginPath();
-  ctx.moveTo(bird.x, by-7);
-  ctx.lineTo(bird.x-6, by+5);
-  ctx.lineTo(bird.x+6, by+5);
+  ctx.moveTo(bird.x, by-7*S);
+  ctx.lineTo(bird.x-6*S, by+5*S);
+  ctx.lineTo(bird.x+6*S, by+5*S);
   ctx.closePath();
   ctx.fill();
   // 球頭
   ctx.fillStyle = '#f2f2f2';
   ctx.beginPath();
-  ctx.arc(bird.x, by+5, 3.5, 0, Math.PI*2);
+  ctx.arc(bird.x, by+5*S, 3.5*S, 0, Math.PI*2);
   ctx.fill();
   ctx.strokeStyle = '#bbb'; ctx.lineWidth=1; ctx.stroke();
 }
@@ -961,6 +1004,11 @@ if(window.matchMedia && window.matchMedia('(hover:none) and (pointer:coarse)').m
   document.getElementById('hint').innerHTML = '<b>P1</b> WASD＋空白　·　<span style="color:#ff7a7a"><b>P2</b> 方向鍵＋Enter</span>';
 }
 
+// 視窗尺寸/旋轉變更時重新排版
+window.addEventListener('resize', ()=>{ layout(); });
+window.addEventListener('orientationchange', ()=> setTimeout(layout, 200));
+
+layout();   // 初始排版
 loop();
 </script>
 </body>
