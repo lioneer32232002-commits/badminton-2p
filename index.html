@@ -87,7 +87,7 @@ canvas {
     <b>P1：WASD 移動・空白鍵 擊球</b>　|
     <span class="p2b">P2：方向鍵 移動・Enter 擊球</span>
   </div>
-  <div>往前壓＝殺球 / 站定＝高遠球　|　<b>M</b> 靜音</div>
+  <div>球在高處自動殺球 / 左右鍵控制落點　|　<b>M</b> 靜音</div>
 </div>
 
 <div id="overlay">
@@ -95,8 +95,8 @@ canvas {
   <p>俯視視角・同機對戰・落地得分</p>
   <p class="keys"><b>玩家 1（下半場・綠）</b>：<b>W A S D</b> 移動，<b>空白鍵</b> 擊球</p>
   <p class="keys"><span class="p2b">玩家 2（上半場・紅）</span>：<span class="p2b">方向鍵</span> 移動，<span class="p2b">Enter</span> 擊球</p>
-  <p style="margin-top:14px;color:#999;font-size:13px;">球靠近你時按擊球鍵。擊球瞬間往前壓 → 快速下壓殺球；站定或後退 → 高遠球；左右移動可控制落點。</p>
-  <p style="color:#999;font-size:13px;">陰影離球越遠代表球飛得越高。</p>
+  <p style="margin-top:14px;color:#999;font-size:13px;">移動到球附近，按住擊球鍵就會自動回擊。球在<b style="color:#ffd24a">高處會自動殺球</b>，按住<b style="color:#fff">左右方向鍵</b>控制落點。</p>
+  <p style="color:#999;font-size:13px;">連續對拉球會越來越快 🔥　｜　陰影離球越遠代表球飛得越高。</p>
   <button id="startBtn">開始遊戲</button>
 </div>
 
@@ -129,8 +129,9 @@ function makePlayer(isP1){
     x: W/2,
     y: isP1 ? COURT.y + COURT.h*0.78 : COURT.y + COURT.h*0.22,
     vx:0, vy:0,
-    px:0, py:0,            // 上一幀位置，用來算擊球時的移動方向
-    reach: 58,
+    px:0, py:0,            // 上一幀位置
+    reach: 72,             // 擊球範圍（加大、更好打）
+    hitCd: 0,              // 擊球冷卻
     swingTimer: 0,         // 揮拍動畫
     color: isP1 ? '#4ad07a' : '#ff7a7a',
     dark: isP1 ? '#2a8f52' : '#c24',
@@ -159,6 +160,12 @@ let shake = 0;             // 螢幕震動強度
 let rally = 0;             // 本回合連續來回拍數
 let bestRally = 0;         // 最佳連拍紀錄
 let serveBlink = 0;        // 發球箭頭閃爍
+let freeze = 0;            // 殺球命中定格（hit-stop）
+let tick = 0;              // 全域幀計數（給觀眾擺動用）
+let crowdEnergy = 0;       // 觀眾興奮度 0~1
+let lastScorer = 0;        // 上一個得分者
+let streak = 0;            // 連續得分數
+let lastShotSmash = false; // 最近一拍是否為殺球（決定殘影顏色）
 
 // ---- 音效（Web Audio，無需外部檔案）----
 let audioCtx = null, soundOn = true;
@@ -181,6 +188,18 @@ function sfxSmash(){ tone(180, 0.18, 'sawtooth', 0.3, 60); tone(900,0.05,'square
 function sfxNet(){ tone(140, 0.15, 'triangle', 0.25, 90); }         // 掛網
 function sfxScore(){ [523,659,784].forEach((f,i)=> setTimeout(()=>tone(f,0.18,'triangle',0.3), i*90)); } // 得分上揚
 function sfxWin(){ [523,659,784,1047].forEach((f,i)=> setTimeout(()=>tone(f,0.25,'triangle',0.32), i*130)); }
+function sfxCheer(){                                                  // 觀眾歡呼（濾波雜訊）
+  if(!soundOn || !audioCtx) return;
+  const dur = 0.55, sr = audioCtx.sampleRate;
+  const buf = audioCtx.createBuffer(1, sr*dur, sr);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){ d[i] = (Math.random()*2-1) * Math.pow(1-i/d.length, 1.4); }
+  const src = audioCtx.createBufferSource(); src.buffer = buf;
+  const flt = audioCtx.createBiquadFilter(); flt.type='bandpass'; flt.frequency.value=1100; flt.Q.value=0.6;
+  const g = audioCtx.createGain(); g.gain.value=0.22;
+  src.connect(flt); flt.connect(g); g.connect(audioCtx.destination);
+  src.start();
+}
 
 // ---- 特效輔助 ----
 function spawnParticles(x, y, color, n, spd){
@@ -233,6 +252,7 @@ function startGame(){
   server = 1;
   rally = 0; bestRally = 0;
   trail = []; particles = []; floats = []; shake = 0;
+  freeze = 0; crowdEnergy = 0; lastScorer = 0; streak = 0;
   initAudio();
   updateScore();
   document.getElementById('overlay').classList.add('hidden');
@@ -244,77 +264,67 @@ function updateScore(){
   document.getElementById('score2').textContent = score2;
 }
 
-// ---- 擊球 ----
+// ---- 擊球（簡化操作）----
+// 規則：站到球附近按擊球鍵就會自動回擊。球在高處 → 自動殺球，否則 → 高弧回擊。
+//       按住左右方向鍵控制落點。發球固定為好打的高拋球。
 function tryHit(player, hitKey){
-  if(!hitKey || !bird.alive) return;
-  const dx = bird.x - player.x;
-  const dy = bird.y - player.y;
-  const dist = Math.hypot(dx, dy);
-  // 高度也要在合理可擊範圍（蹲跳簡化：z 不能太高）
-  if(dist > player.reach || bird.z > 165) return;
+  if(!hitKey || !bird.alive || player.hitCd>0) return;
+  const dist = Math.hypot(bird.x-player.x, bird.y-player.y);
+  if(dist > player.reach || bird.z > 175) return;
 
   player.swingTimer = 8;
+  player.hitCd = 14;                         // 擊球冷卻，避免按住連發
+  const dirY = player.isP1 ? -1 : 1;          // P1 往上打、P2 往下打
 
-  // 擊球方向：朝對方半場
-  const toUp = player.isP1;   // P1 往上打，P2 往下打
-  const dirY = toUp ? -1 : 1;
+  // 落點左右：用目前按住的左右鍵（直覺）
+  let aim = 0;
+  if(player.isP1){ if(keys['KeyA']) aim-=1; if(keys['KeyD']) aim+=1; }
+  else { if(keys['ArrowLeft']) aim-=1; if(keys['ArrowRight']) aim+=1; }
 
-  // 玩家當下的移動方向（用上一幀位置算）
-  const moveY = player.y - player.py;   // 正=往下移動
-  const moveX = player.x - player.px;
+  initAudio();
+  lastHitter = player.isP1 ? 1 : 2;
+  bird.owner = null;
 
-  // 判斷攻擊性：往網子方向壓 + 球還有點高 → 殺球
-  const pressingNet = toUp ? (moveY < -0.6) : (moveY > 0.6);
-  const high = bird.z > 80;
-
-  let power, lift, shotName, shotColor, isSmash=false;
-  if(pressingNet && high){
-    // 殺球：快、平、下壓
-    power = 11.5; lift = 2.0;
-    bird.spin = 1;
-    shotName = '殺球！'; shotColor = '#ffd24a'; isSmash = true;
-  } else if(pressingNet){
-    // 平抽快球
-    power = 9; lift = 4.5;
+  // ---- 發球：固定的好打高拋球，預設往對面場中央 ----
+  if(state === STATE.SERVE){
+    bird.vy = dirY * 6.2;
+    bird.vz = 9.5;
+    bird.vx = aim*2.0 + (W/2 - bird.x)*0.015;
     bird.spin = 0;
-    shotName = '平抽'; shotColor = '#7fd0ff';
-  } else if(moveY*dirY < -0.6){
-    // 往後退打 → 高遠球（深遠到底線）
-    power = 6.2; lift = 11;
-    bird.spin = 0;
-    shotName = '高遠球'; shotColor = '#c0ffb0';
-  } else {
-    // 站定 → 標準回擊（中高弧線）
-    power = 7.2; lift = 8.5;
-    bird.spin = 0;
-    shotName = '回擊'; shotColor = '#ffffff';
+    lastShotSmash = false;
+    sfxHit();
+    spawnParticles(bird.x, bird.y-bird.z*0.55, '#fff', 7, 2.6);
+    addFloat(player.x, player.y-24, '發球', '#ffd24a', 18);
+    state = STATE.RALLY; rally = 0;
+    serveMsg = '';
+    document.getElementById('serve-msg').textContent = '';
+    return;
   }
 
-  bird.vy = dirY * power;
+  // ---- 一般回擊：球種依「球的高度」自動決定 ----
+  const heat = 1 + Math.min(rally*0.025, 0.45);   // 連拍越多球越快
+  const high = bird.z > 95;
+  let power, lift, shotName, shotColor, isSmash=false;
+  if(high){
+    power = 10.5; lift = 2.5; isSmash = true; bird.spin = 1;
+    shotName = '殺球！'; shotColor = '#ffd24a';
+  } else {
+    power = 7.2; lift = 8.5; bird.spin = 0;
+    shotName = '回擊'; shotColor = '#ffffff';
+  }
+  bird.vy = dirY * power * heat;
   bird.vz = lift;
-  // 左右落點由橫向移動控制
-  bird.vx = Math.max(-4, Math.min(4, moveX*0.9));
-  bird.owner = null;
-  lastHitter = player.isP1 ? 1 : 2;
+  bird.vx = aim * 3.4;
+  lastShotSmash = isSmash;
 
   // ---- 特效 ----
-  initAudio();
-  if(isSmash){ sfxSmash(); shake = 9; spawnParticles(bird.x, bird.y-bird.z*0.55, '#ffd24a', 14, 4.5); }
+  if(isSmash){ sfxSmash(); shake = 9; freeze = 4; spawnParticles(bird.x, bird.y-bird.z*0.55, '#ffd24a', 14, 4.5); }
   else { sfxHit(); spawnParticles(bird.x, bird.y-bird.z*0.55, '#fff', 7, 2.6); }
   addFloat(player.x, player.y-24, shotName, shotColor, isSmash?26:18);
 
-  // 連拍計數（發球的第一拍不算來回）
-  if(state === STATE.RALLY){
-    rally++;
-    if(rally>=3 && rally%3===0) addFloat(W/2, NET_Y, '連拍 '+rally+'！', '#ffd24a', 22);
-  }
-
-  if(state === STATE.SERVE){
-    state = STATE.RALLY;
-    rally = 0;
-    serveMsg = '';
-    document.getElementById('serve-msg').textContent = '';
-  }
+  // 連拍計數
+  rally++;
+  if(rally>=3 && rally%3===0) addFloat(W/2, NET_Y, (heat>1.3?'🔥 ':'')+'連拍 '+rally+'！', heat>1.3?'#ff9a3a':'#ffd24a', 22);
 }
 
 // ---- 得分判定 ----
@@ -328,12 +338,18 @@ function awardPoint(winner, reason){
   server = winner;   // 得分方發球（rally point）
   updateScore();
 
-  // 特效：落地爆裂 + 震動 + 音效
+  // 特效：落地爆裂 + 震動 + 音效 + 觀眾歡呼
   const landColor = (reason==='出界'||reason==='掛網'||reason==='發球出界') ? '#ff7a7a' : '#ffd24a';
   spawnParticles(bird.x, bird.y, landColor, 18, 5);
   addFloat(bird.x, bird.y-10, reason, landColor, 18);
   shake = 11;
+  crowdEnergy = 1;
   sfxScore();
+  setTimeout(sfxCheer, 120);
+
+  // 連續得分氣勢
+  if(winner===lastScorer) streak++; else { streak = 1; lastScorer = winner; }
+  if(streak>=2) addFloat(W/2, winner===1 ? NET_Y+90 : NET_Y-90, '連得 '+streak+' 分！', winner===1?'#4ad07a':'#ff7a7a', 22);
 
   // 紀錄最佳連拍
   if(rally > bestRally) bestRally = rally;
@@ -361,6 +377,10 @@ function update(){
   if(state===STATE.MENU || state===STATE.OVER) return;
 
   updateEffects();
+  tick++;
+  if(crowdEnergy>0) crowdEnergy *= 0.96;
+  if(p1.hitCd>0) p1.hitCd--;
+  if(p2.hitCd>0) p2.hitCd--;
 
   // 玩家移動（P1 在下半場、P2 在上半場）
   movePlayer(p1, 'KeyW','KeyS','KeyA','KeyD', NET_Y+4, COURT.y+COURT.h-4);
@@ -389,22 +409,26 @@ function update(){
     bird.z = 70;
   }
 
-  // 羽球物理
+  // 羽球物理（殺球命中後短暫定格，增加衝擊感）
   if(state===STATE.RALLY && bird.alive){
-    bird.x += bird.vx;
-    bird.y += bird.vy;
-    bird.z += bird.vz;
-    bird.vz -= GRAV;
-    // 羽球空氣阻力（飄）：水平速度逐漸衰減，尾段下墜明顯
-    bird.vx *= 0.985;
-    bird.vy *= 0.992;
-    if(bird.vz < 0) bird.vz *= 0.985;
+    if(freeze>0){
+      freeze--;
+    } else {
+      bird.x += bird.vx;
+      bird.y += bird.vy;
+      bird.z += bird.vz;
+      bird.vz -= GRAV;
+      // 羽球空氣阻力（飄）：水平速度逐漸衰減，尾段下墜明顯
+      bird.vx *= 0.985;
+      bird.vy *= 0.992;
+      if(bird.vz < 0) bird.vz *= 0.985;
 
-    // 殘影
-    trail.push({ x:bird.x, y:bird.y - bird.z*0.55, life:1 });
-    if(trail.length>14) trail.shift();
+      // 殘影（殺球為金色）
+      trail.push({ x:bird.x, y:bird.y - bird.z*0.55, life:1, smash:lastShotSmash });
+      if(trail.length>14) trail.shift();
 
-    checkBirdEvents();
+      checkBirdEvents();
+    }
   }
 
   // 記錄玩家上一幀位置（給下一幀算擊球方向）
@@ -477,6 +501,9 @@ function draw(){
   ctx.fillStyle = '#1c6b41';
   ctx.fillRect(COURT.x, COURT.y, COURT.w, COURT.h);
 
+  // 場邊觀眾
+  drawCrowd();
+
   // 場線
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 2;
@@ -539,11 +566,30 @@ function draw(){
 function drawTrail(){
   for(let i=0;i<trail.length;i++){
     const t = trail[i];
-    ctx.fillStyle = 'rgba(255,255,255,'+(t.life*0.35*(i/trail.length))+')';
+    const a = t.life*0.4*(i/trail.length);
+    ctx.fillStyle = t.smash ? 'rgba(255,210,74,'+a+')' : 'rgba(255,255,255,'+a+')';
     ctx.beginPath();
     ctx.arc(t.x, t.y, 3*(i/trail.length)+1, 0, Math.PI*2);
     ctx.fill();
   }
+}
+
+// 場邊觀眾：上下各一排小點，得分時(crowdEnergy 高)會跳動歡呼
+function drawCrowd(){
+  const cols = ['#e6b35a','#7fb0e0','#e07f9a','#9ad17a','#c79ae0','#e0c97f'];
+  const rows = [ {y:20, n:26}, {y:H-20, n:26} ];
+  for(const row of rows){
+    for(let i=0;i<row.n;i++){
+      const x = COURT.x + (i+0.5)*(COURT.w/row.n);
+      const bounce = crowdEnergy * 6 * Math.abs(Math.sin(tick*0.3 + i*0.9));
+      ctx.fillStyle = cols[i % cols.length];
+      ctx.globalAlpha = 0.55 + crowdEnergy*0.4;
+      ctx.beginPath();
+      ctx.arc(x, row.y - bounce, 4, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawParticles(){
